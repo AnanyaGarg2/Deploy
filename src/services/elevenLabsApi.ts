@@ -17,7 +17,7 @@ interface ElevenLabsRequest {
 }
 
 // Voice configurations for different content types
-const VOICE_CONFIGS = {
+export const VOICE_CONFIGS = {
   'podcast': {
     voice_id: 'pNInz6obpgDQGcFmaJgB', // Adam - Professional male voice
     model_id: 'eleven_turbo_v2_5',

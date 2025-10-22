@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Search, Home, Library, User, Heart, Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat, Radio } from 'lucide-react';
 import Sidebar from './components/Sidebar';
-import Header from './components/Header';
 import HomePage from './components/HomePage';
 import UploadPage from './components/UploadPage';
 import LibraryPage from './components/LibraryPage';
@@ -45,11 +43,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  
-  // Mock user ID - in real app, get from auth context
+
   const currentUserId = '550e8400-e29b-41d4-a716-446655440000';
 
-  // Sample data
   const sampleTracks: Track[] = [
     {
       id: '1',
@@ -58,7 +54,8 @@ function App() {
       duration: '24:15',
       type: 'solo-narration',
       coverUrl: 'https://images.pexels.com/photos/1926988/pexels-photo-1926988.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
+      audioUrl: '#',
+      tags: []
     },
     {
       id: '2',
@@ -67,7 +64,8 @@ function App() {
       duration: '45:32',
       type: 'audio-drama',
       coverUrl: 'https://images.pexels.com/photos/2067569/pexels-photo-2067569.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
+      audioUrl: '#',
+      tags: []
     },
     {
       id: '3',
@@ -76,34 +74,8 @@ function App() {
       duration: '32:18',
       type: 'podcast',
       coverUrl: 'https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
-    },
-    {
-      id: '4',
-      title: 'Rain Sounds for Sleep',
-      creator: 'Calm Nights',
-      duration: '60:00',
-      type: 'slow-content',
-      coverUrl: 'https://images.pexels.com/photos/1529881/pexels-photo-1529881.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
-    },
-    {
-      id: '5',
-      title: 'The Art of War - Full Book',
-      creator: 'Classic Reads',
-      duration: '180:45',
-      type: 'solo-narration',
-      coverUrl: 'https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
-    },
-    {
-      id: '6',
-      title: 'Meditation for Beginners',
-      creator: 'Mindful Moments',
-      duration: '25:30',
-      type: 'slow-content',
-      coverUrl: 'https://images.pexels.com/photos/3822622/pexels-photo-3822622.jpeg?auto=compress&cs=tinysrgb&w=300',
-      audioUrl: '#'
+      audioUrl: '#',
+      tags: []
     }
   ];
 
@@ -144,32 +116,38 @@ function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'home':
-        return <HomePage 
-          playlists={samplePlaylists} 
-          tracks={sampleTracks} 
-          onPlayTrack={handlePlayTrack}
-          selectedCategory={selectedCategory}
-          onCategorySelect={handleCategorySelect}
-        />;
+        return (
+          <HomePage
+            playlists={samplePlaylists}
+            tracks={sampleTracks}
+            onPlayTrack={handlePlayTrack}
+            selectedCategory={selectedCategory}
+            onCategorySelect={handleCategorySelect}
+          />
+        );
       case 'upload':
         return <UploadPage />;
       case 'library':
         return <LibraryPage playlists={samplePlaylists} tracks={sampleTracks} onPlayTrack={handlePlayTrack} />;
       case 'profile':
-        return <ProfilePage 
-          playlists={samplePlaylists} 
-          tracks={sampleTracks} 
-          onPlayTrack={handlePlayTrack}
-          currentUserId={currentUserId}
-          isOwnProfile={true}
-        />;
+        return (
+          <ProfilePage
+            playlists={samplePlaylists}
+            tracks={sampleTracks}
+            onPlayTrack={handlePlayTrack}
+            currentUserId={currentUserId}
+            isOwnProfile={true}
+          />
+        );
       case 'discover':
-        return <DiscoverPage 
-          playlists={samplePlaylists} 
-          tracks={sampleTracks} 
-          onPlayTrack={handlePlayTrack}
-          currentUserId={currentUserId}
-        />;
+        return (
+          <DiscoverPage
+            playlists={samplePlaylists}
+            tracks={sampleTracks}
+            onPlayTrack={handlePlayTrack}
+            currentUserId={currentUserId}
+          />
+        );
       case 'radio':
         return <RadioPage onPlayTrack={handlePlayTrack} />;
       case 'books':
@@ -185,40 +163,26 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
-        
+
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden bg-zinc-900">
-          {/* Header */}
-          <Header 
-            searchQuery={searchQuery} 
-            onSearchChange={setSearchQuery}
-            onUpgradeClick={() => setShowSubscriptionModal(true)}
-            onNotificationClick={() => setShowNotifications(true)}
-          />
-          
           {/* Page Content */}
-          <main className="flex-1 overflow-y-auto p-6 bg-black">
-            {renderCurrentPage()}
-          </main>
+          <main className="flex-1 overflow-y-auto p-6 bg-black">{renderCurrentPage()}</main>
         </div>
       </div>
 
       {/* Audio Player */}
       {currentTrack && (
-        <AudioPlayer
-          track={currentTrack}
-          isPlaying={isPlaying}
-          onTogglePlay={togglePlayPause}
-        />
+        <AudioPlayer track={currentTrack} isPlaying={isPlaying} onTogglePlay={togglePlayPause} />
       )}
-      
+
       {/* Subscription Modal */}
       <SubscriptionModal
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
         currentUserId={currentUserId}
       />
-      
+
       {/* Notification Panel */}
       <NotificationPanel
         isOpen={showNotifications}

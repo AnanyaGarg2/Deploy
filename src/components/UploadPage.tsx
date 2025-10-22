@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Mic, Headphones, Clock, Zap, Settings, CheckCircle, AlertCircle, User, Plus, X, Tag } from 'lucide-react';
+import { Upload, FileText, Mic, Headphones, Clock, Zap, Settings, CheckCircle, AlertCircle } from 'lucide-react';
 import { elevenLabsService } from '../services/elevenLabsApi';
 import { DocumentProcessor } from '../utils/fileProcessor';
 import { SubscriptionService } from '../services/subscriptionService';
 import TokenDisplay from './TokenDisplay';
 import SubscriptionModal from './SubscriptionModal';
+import { ElevenLabsClient, play } from "@elevenlabs/elevenlabs-js";
 
 interface ProcessingStatus {
   stage: 'idle' | 'processing-text' | 'generating-audio' | 'complete' | 'error';
@@ -13,184 +14,119 @@ interface ProcessingStatus {
 }
 
 const UploadPage: React.FC = () => {
+  const elevenlabs = new ElevenLabsClient({
+    apiKey: "sk_be1e3f39d59ef88d397dd1cc77988dc705931cb08f31e58a",
+    environment: "https://api.elevenlabs.io",
+  });
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [conversionType, setConversionType] = useState<'podcast' | 'audio-drama' | 'slow-content' | 'solo-narration' | 'audiobook' | 'educational' | 'entertainment'>('podcast');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState<string>('default');
-  const [isCloneVoice, setIsCloneVoice] = useState(false);
-  const [voiceFile, setVoiceFile] = useState<File | null>(null);
-  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
-    stage: 'idle', progress: 0, message: ''
-  });
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({ stage: 'idle', progress: 0, message: '' });
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [estimatedTokens, setEstimatedTokens] = useState(0);
-  
-  // Mock user ID - in real app, get from auth context
+
   const currentUserId = '550e8400-e29b-41d4-a716-446655440000';
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      if (!title) {
-        setTitle(file.name.replace(/\.[^/.]+$/, ''));
-      }
-      
-      // Estimate tokens needed
-      DocumentProcessor.processFile(file).then(processed => {
-        const tokensNeeded = SubscriptionService.calculateTokensNeeded(processed.wordCount);
-        setEstimatedTokens(tokensNeeded);
-      });
-    }
+    if (!file) return;
+
+    setSelectedFile(file);
+    if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ''));
+
+    const processed = await DocumentProcessor.processFile(file);
+    const tokensNeeded = SubscriptionService.calculateTokensNeeded(processed.wordCount);
+    setEstimatedTokens(tokensNeeded);
+
+    // Optional preview of first 200 chars
+    await speakText(conversionType, processed.text.slice(0, 200));
   };
 
   const handleSubmit = async () => {
-    if (selectedFile && title) {
-      try {
-        // Check if user has enough tokens
-        const hasEnoughTokens = await SubscriptionService.checkTokensAvailable(currentUserId, estimatedTokens);
-        if (!hasEnoughTokens) {
-          setProcessingStatus({
-            stage: 'error',
-            progress: 0,
-            message: 'Insufficient tokens. Please upgrade your plan or wait for monthly reset.'
-          });
-          return;
-        }
+    if (!selectedFile || !title) return;
 
-        // Stage 1: Process document
-        setProcessingStatus({
-          stage: 'processing-text',
-          progress: 10,
-          message: 'Processing document and extracting text...'
-        });
+    try {
+      const hasEnoughTokens = await SubscriptionService.checkTokensAvailable(currentUserId, estimatedTokens);
+      if (!hasEnoughTokens) {
+        setProcessingStatus({ stage: 'error', progress: 0, message: 'Insufficient tokens. Upgrade or wait for reset.' });
+        return;
+      }
 
-        const processedDoc = await DocumentProcessor.processFile(selectedFile);
-        
-        setProcessingStatus({
-          stage: 'processing-text',
-          progress: 30,
-          message: `Extracted ${processedDoc.wordCount} words. Estimated duration: ${DocumentProcessor.formatDuration(processedDoc.estimatedDuration)}`
-        });
+      setProcessingStatus({ stage: 'processing-text', progress: 10, message: 'Processing document...' });
+      const processedDoc = await DocumentProcessor.processFile(selectedFile);
 
-        // Stage 2: Generate audio with Eleven Labs
+      setProcessingStatus({
+        stage: 'processing-text',
+        progress: 30,
+        message: `Extracted ${processedDoc.wordCount} words. Duration: ${DocumentProcessor.formatDuration(processedDoc.estimatedDuration)}`
+      });
+
+      setProcessingStatus({ stage: 'generating-audio', progress: 40, message: 'Generating audio...' });
+
+      const audioBlob = await elevenLabsService.generateAudio(processedDoc.text, conversionType, (progress) => {
         setProcessingStatus({
           stage: 'generating-audio',
-          progress: 40,
-          message: 'Generating audio with AI voice synthesis...'
+          progress: 40 + (progress * 0.5),
+          message: `Generating audio... ${Math.round(progress)}%`
         });
+      });
 
-        const audioBlob = await elevenLabsService.generateAudio(
-          processedDoc.text,
-          conversionType,
-          (progress) => {
-            setProcessingStatus({
-              stage: 'generating-audio',
-              progress: 40 + (progress * 0.5),
-              message: `Generating audio... ${Math.round(progress)}%`
-            });
-          }
-        );
+      await SubscriptionService.useTokens(currentUserId, 'temp-track-id', estimatedTokens, processedDoc.wordCount);
 
-        // Use tokens
-        await SubscriptionService.useTokens(
-          currentUserId,
-          'temp-track-id', // In real app, this would be the created track ID
-          estimatedTokens,
-          processedDoc.wordCount
-        );
+      setProcessingStatus({ stage: 'complete', progress: 100, message: 'Audio generation completed successfully!' });
+      console.log('Generated audio:', audioBlob);
 
-        // Stage 3: Complete
-        setProcessingStatus({
-          stage: 'complete',
-          progress: 100,
-          message: 'Audio generation completed successfully!'
-        });
-
-        // Here you would typically upload the audio blob to your storage
-        console.log('Generated audio blob:', audioBlob);
-        
-      } catch (error) {
-        console.error('Processing error:', error);
-        setProcessingStatus({
-          stage: 'error',
-          progress: 0,
-          message: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
-        });
-      }
+    } catch (error: any) {
+      console.error('Error:', error);
+      setProcessingStatus({ stage: 'error', progress: 0, message: error.message || 'Unknown error' });
     }
   };
 
-  const conversionOptions = [
-    {
-      type: 'audiobook' as const,
-      icon: FileText,
-      title: 'Audiobook',
-      description: 'Chapter-by-chapter book narration with natural pacing',
-      color: 'from-gray-500 to-gray-800',
-      features: ['Chapter breaks', 'Consistent narration', 'Book-style pacing', 'Multiple voices available']
-    },
-    {
-      type: 'podcast' as const,
-      icon: Mic,
-      title: 'Podcast Style',
-      description: 'Professional narration with natural pacing and emphasis',
-      color: 'from-gray-500 to-gray-800',
-      features: ['Clear diction', 'Natural pauses', 'Professional tone', 'Interview style']
-    },
-    {
-      type: 'audio-drama' as const,
-      icon: Headphones,
-      title: 'Audio Drama',
-      description: 'Theatrical performance with character voices and sound effects',
-      color: 'from-gray-600 to-gray-900',
-      features: ['Expressive delivery', 'Dramatic pacing', 'Theatrical style', 'Character voices']
-    },
-    {
-      type: 'slow-content' as const,
-      icon: Clock,
-      title: 'Slow Content',
-      description: 'ASMR, meditation, and calming content for relaxation',
-      color: 'from-gray-400 to-gray-700',
-      features: ['Soothing tone', 'Slow pace', 'Calming atmosphere', 'Relaxation focused']
-    },
-    {
-      type: 'solo-narration' as const,
-      icon: Headphones,
-      title: 'Solo Narration',
-      description: 'Single voice narration for books, essays, and papers',
-      color: 'from-gray-500 to-gray-800',
-      features: ['Clear narration', 'Authoritative tone', 'Educational style', 'Documentary style']
-    },
-    {
-      type: 'educational' as const,
-      icon: FileText,
-      title: 'Educational',
-      description: 'Learning content with clear explanations and emphasis',
-      color: 'from-gray-500 to-gray-700',
-      features: ['Clear explanations', 'Emphasis on key points', 'Learning focused', 'Tutorial style']
-    },
-    {
-      type: 'entertainment' as const,
-      icon: Mic,
-      title: 'Entertainment',
-      description: 'Engaging content for entertainment and storytelling',
-      color: 'from-gray-600 to-gray-800',
-      features: ['Engaging delivery', 'Story-focused', 'Entertainment value', 'Dynamic pacing']
+  async function speakText(type: string, text: string) {
+    try {
+      let voiceId = 'KSsyodh37PbfWy29kPtx'; // default
+      const voiceMap: Record<string, string> = {
+        'audiobook': 'Xb7hH8MSUJpSbSDYk0k2',
+        'podcast': 'pqHfZKP75CvOlQylNhV4',
+        'audio-drama': 'IKne3meq5aSn9XLyUdCD',
+        'slow-content': '21m00Tcm4TlvDq8ikWAM',
+        'solo-narration': 'nPczCjzI2devNBz1zQrb',
+        'educational': 'KSsyodh37PbfWy29kPtx',
+        'entertainment': 'KSsyodh37PbfWy29kPtx',
+      };
+      voiceId = voiceMap[type] || voiceId;
+
+      const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+        text,
+        modelId: "eleven_multilingual_v2",
+        outputFormat: "mp3_44100_128",
+      });
+
+      const audioBlob = new Blob([await audio.arrayBuffer()], { type: "audio/mpeg" });
+      await play(audioBlob);
+
+    } catch (err) {
+      console.error('speakText error:', err);
     }
+  }
+
+  const conversionOptions = [
+    { type: 'audiobook', icon: FileText, title: 'Audiobook', description: 'Chapter-by-chapter narration', features: ['Chapter breaks', 'Multiple voices'], color: 'from-gray-500 to-gray-800' },
+    { type: 'podcast', icon: Mic, title: 'Podcast Style', description: 'Professional narration', features: ['Clear diction', 'Professional tone'], color: 'from-gray-500 to-gray-800' },
+    { type: 'audio-drama', icon: Headphones, title: 'Audio Drama', description: 'Theatrical performance', features: ['Dramatic pacing', 'Character voices'], color: 'from-gray-600 to-gray-900' },
+    { type: 'slow-content', icon: Clock, title: 'Slow Content', description: 'ASMR, meditation', features: ['Soothing tone', 'Relaxation focused'], color: 'from-gray-400 to-gray-700' },
+    { type: 'solo-narration', icon: Headphones, title: 'Solo Narration', description: 'Single voice narration', features: ['Clear narration', 'Educational style'], color: 'from-gray-500 to-gray-800' },
+    { type: 'educational', icon: FileText, title: 'Educational', description: 'Learning content', features: ['Clear explanations', 'Tutorial style'], color: 'from-gray-500 to-gray-700' },
+    { type: 'entertainment', icon: Mic, title: 'Entertainment', description: 'Engaging content', features: ['Story-focused', 'Dynamic pacing'], color: 'from-gray-600 to-gray-800' },
   ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Token Display */}
       <div className="max-w-sm">
-        <TokenDisplay 
-          userId={currentUserId} 
-          onUpgradeClick={() => setShowSubscriptionModal(true)} 
-        />
+        <TokenDisplay userId={currentUserId} onUpgradeClick={() => setShowSubscriptionModal(true)} />
       </div>
 
       {/* Header */}
@@ -214,14 +150,8 @@ const UploadPage: React.FC = () => {
                 <FileText size={20} />
                 <span className="font-medium">{selectedFile.name}</span>
               </div>
-              <p className="text-gray-600 text-sm">
-                File size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-              {estimatedTokens > 0 && (
-                <p className="text-gray-600 text-sm">
-                  Estimated tokens needed: {estimatedTokens.toLocaleString()}
-                </p>
-              )}
+              <p className="text-gray-600 text-sm">File size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+              {estimatedTokens > 0 && <p className="text-gray-600 text-sm">Estimated tokens needed: {estimatedTokens.toLocaleString()}</p>}
             </div>
           ) : (
             <div className="space-y-2">
@@ -230,38 +160,20 @@ const UploadPage: React.FC = () => {
             </div>
           )}
           
-          <input
-            type="file"
-            onChange={handleFileUpload}
-            accept=".pdf,.doc,.docx,.txt"
-            className="hidden"
-            id="file-upload"
-          />
-          <label
-            htmlFor="file-upload"
-            className="inline-block bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-full font-semibold cursor-pointer transition-all duration-200"
-          >
-            Choose File
-          </label>
+          <input type="file" onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" className="hidden" id="file-upload" />
+          <label htmlFor="file-upload" className="inline-block bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-full font-semibold cursor-pointer transition-all duration-200">Choose File</label>
         </div>
       </div>
 
-      {/* Conversion Type Selection */}
+      {/* Conversion Type */}
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-black">Choose Conversion Style</h2>
+        <h2 className="text-2xl font-bold text-white">Choose Conversion Style</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {conversionOptions.map((option) => {
+          {conversionOptions.map(option => {
             const Icon = option.icon;
             return (
-              <div
-                key={option.type}
-                onClick={() => setConversionType(option.type)}
-                className={`p-6 rounded-2xl cursor-pointer transition-all duration-300 ${
-                  conversionType === option.type
-                    ? 'bg-black text-white ring-2 ring-black'
-                    : 'bg-gray-100 hover:bg-gray-200 text-black'
-                }`}
-              >
+              <div key={option.type} onClick={async () => { setConversionType(option.type); await speakText(option.type, "Preview text"); }}
+                   className={`p-6 rounded-2xl cursor-pointer transition-all duration-300 ${conversionType === option.type ? 'bg-black text-white ring-2 ring-black' : 'bg-gray-100 hover:bg-gray-200 text-black'}`}>
                 <div className="space-y-4">
                   <Icon size={32} className={conversionType === option.type ? 'text-white' : 'text-black'} />
                   <div>
@@ -269,8 +181,8 @@ const UploadPage: React.FC = () => {
                     <p className={`text-sm mt-1 ${conversionType === option.type ? 'text-gray-300' : 'text-gray-600'}`}>{option.description}</p>
                   </div>
                   <ul className="space-y-1">
-                    {option.features.map((feature, index) => (
-                      <li key={index} className={`text-sm flex items-center space-x-2 ${conversionType === option.type ? 'text-gray-300' : 'text-gray-600'}`}>
+                    {option.features.map((feature, idx) => (
+                      <li key={idx} className={`text-sm flex items-center space-x-2 ${conversionType === option.type ? 'text-gray-300' : 'text-gray-600'}`}>
                         <div className={`w-1 h-1 rounded-full ${conversionType === option.type ? 'bg-gray-300' : 'bg-gray-600'}`}></div>
                         <span>{feature}</span>
                       </li>
@@ -286,19 +198,12 @@ const UploadPage: React.FC = () => {
       {/* Metadata Form */}
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6 space-y-6">
         <h2 className="text-2xl font-bold text-black">Audio Details</h2>
-        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black"
-              placeholder="Enter audio title"
-            />
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter audio title"
+                   className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black" />
           </div>
-          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
             <select className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black">
@@ -311,19 +216,11 @@ const UploadPage: React.FC = () => {
             </select>
           </div>
         </div>
-        
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black"
-            placeholder="Describe your audio content"
-          />
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Describe your audio content"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black" />
         </div>
-
-        {/* Advanced Settings */}
         <div className="space-y-4">
           <button className="flex items-center space-x-2 text-gray-600 hover:text-black transition-colors">
             <Settings size={20} />
@@ -336,31 +233,21 @@ const UploadPage: React.FC = () => {
       {processingStatus.stage !== 'idle' && (
         <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6">
           <div className="flex items-center space-x-4 mb-4">
-            {processingStatus.stage === 'complete' ? (
-              <CheckCircle className="text-green-500" size={24} />
-            ) : processingStatus.stage === 'error' ? (
-              <AlertCircle className="text-red-500" size={24} />
-            ) : (
-              <Zap className="text-blue-500 animate-spin" size={24} />
-            )}
+            {processingStatus.stage === 'complete' ? <CheckCircle className="text-green-500" size={24} /> :
+             processingStatus.stage === 'error' ? <AlertCircle className="text-red-500" size={24} /> :
+             <Zap className="text-blue-500 animate-spin" size={24} />}
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-white">
-                {processingStatus.stage === 'complete' ? 'Complete!' : 
-                 processingStatus.stage === 'error' ? 'Error' : 'Processing...'}
+                {processingStatus.stage === 'complete' ? 'Complete!' : processingStatus.stage === 'error' ? 'Error' : 'Processing...'}
               </h3>
               <p className="text-gray-400 text-sm">{processingStatus.message}</p>
             </div>
           </div>
-          
           {processingStatus.stage !== 'error' && processingStatus.stage !== 'complete' && (
             <div className="w-full bg-gray-700 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${processingStatus.progress}%` }}
-              ></div>
+              <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${processingStatus.progress}%` }}></div>
             </div>
           )}
-          
           {processingStatus.stage === 'complete' && (
             <button className="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-full font-semibold transition-all duration-200">
               View in Library
@@ -380,31 +267,20 @@ const UploadPage: React.FC = () => {
               : 'bg-silver hover:bg-white text-black transform hover:scale-105'
           }`}
         >
-          {processingStatus.stage === 'processing-text' || processingStatus.stage === 'generating-audio' ? (
-            <div className="flex items-center space-x-2">
-              <Zap className="animate-spin" size={20} />
-              <span>Generating Audio...</span>
-            </div>
-          ) : (
-            'Start AI Conversion'
-          )}
+          {processingStatus.stage === 'processing-text' || processingStatus.stage === 'generating-audio' ?
+            <div className="flex items-center space-x-2"><Zap className="animate-spin" size={20} /><span>Generating Audio...</span></div>
+            : 'Start AI Conversion'}
         </button>
         {selectedFile && (
           <div className="text-gray-400 text-sm mt-2 space-y-1">
             <p>Processing time varies based on document length</p>
-            {estimatedTokens > 0 && (
-              <p>This will use approximately {estimatedTokens.toLocaleString()} tokens</p>
-            )}
+            {estimatedTokens > 0 && <p>This will use approximately {estimatedTokens.toLocaleString()} tokens</p>}
           </div>
         )}
       </div>
-      
+
       {/* Subscription Modal */}
-      <SubscriptionModal
-        isOpen={showSubscriptionModal}
-        onClose={() => setShowSubscriptionModal(false)}
-        currentUserId={currentUserId}
-      />
+      <SubscriptionModal isOpen={showSubscriptionModal} onClose={() => setShowSubscriptionModal(false)} currentUserId={currentUserId} />
     </div>
   );
 };

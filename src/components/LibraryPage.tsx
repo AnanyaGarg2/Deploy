@@ -72,8 +72,8 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ playlists, tracks, onPlayTrac
             onClick={() => setActiveTab(tab.id as any)}
             className={`pb-4 px-2 text-sm font-medium transition-colors duration-200 ${
               activeTab === tab.id
-                ? 'text-black border-b-2 border-black'
-                : 'text-gray-600 hover:text-black'
+                ? 'text-white border-b-2 border-white'
+                : 'text-gray-600 hover:text-white'
             }`}
           >
             {tab.label} ({tab.count})

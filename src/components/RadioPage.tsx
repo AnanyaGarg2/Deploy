@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Volume2, Radio, SkipForward, Heart, MoreHorizontal, Waves, Zap } from 'lucide-react';
-import { METHODS } from 'http';
+import {
+  Play,
+  Pause,
+  Volume2,
+  Radio,
+  SkipForward,
+  Heart,
+  MoreHorizontal,
+  Waves,
+  Zap,
+} from 'lucide-react';
+
+// --- INTERFACES ---
 
 interface Track {
   id: string;
@@ -15,95 +26,174 @@ interface Track {
 interface RadioStation {
   id: string;
   name: string;
-  description: string;
-  genre: string;
-  coverUrl: string;
+  country: string;
+  language: string;
+  favicon: string;
+  url: string;
   isLive: boolean;
   listeners: number;
-  currentTrack?: Track;
 }
 
 interface RadioPageProps {
   onPlayTrack: (track: Track) => void;
 }
-function RadioPage({ onPlayTrack }: RadioPageProps) {
-const [loading, setLoading] = useState(false);
-const [isPlaying, setIsPlaying] = useState(false);
-const [currentTime, setCurrentTime] = useState(0);
-const [selectedStation, setSelectedStation] = useState<string | null>(null);
-const [radioStations, setRadioStations] = useState<RadioStation[]>([]);
 
-useEffect(() => {
-  // Rename the async function to avoid conflict with the state variable
-  const fetchRadioStations = async (): Promise<void> => {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        // "https://pocket-fm-api.p.rapidapi.com/api/pocket?search=my%20love&apikey=5eb5f408",
-        "https://60k-radio-stations.p.rapidapi.com/get/genres?keyword=jap",
-        {
-          method: "GET",
-          headers: {
-            "X-Rapidapi-Key": "0e611034d2mshc2cc6bec900bc64p17705bjsn1dd58db03294",
-            "X-Rapidapi-Host": "60k-radio-stations.p.rapidapi.com"
+// --- PERSONAL CONTENT SECTION ---
+const PersonalContent: React.FC<RadioPageProps> = ({ onPlayTrack }) => {
+  const [loading, setLoading] = useState(false);
+  const [radioStations, setRadioStations] = useState<RadioStation[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchRadioStations = async (): Promise<void> => {
+      setLoading(true);
+      try {
+        const response = await fetch(
+          "https://60k-radio-stations.p.rapidapi.com/get/genres?keyword=jap",
+          {
+            method: 'GET',
+            headers: {
+              "X-RapidAPI-Key": "0e611034d2mshc2cc6bec900bc64p17705bjsn1dd58db03294",
+              "X-RapidAPI-Host": "60k-radio-stations.p.rapidapi.com",
+            },
           }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data: ${response.status}`);
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data", ${response.status}`);
+        const result = await response.json();
+        console.log('Fetched Radio Stations:', result);
+
+        // ✅ Access actual array from result.data
+        const stations = result.data || [];
+
+        // ✅ Save total count from API
+        setTotalCount(result.total || stations.length);
+
+        // ✅ Map to your RadioStation structure
+        const mappedStations: RadioStation[] = stations.map((station: any) => ({
+          id: String(station.id),
+          name: station.name || 'Unknown Station',
+          country: 'N/A',
+          language: 'N/A',
+          url: '#',
+          isLive: true,
+          listeners: 0,
+          favicon: "/Audio.png",
+        }));
+
+        setRadioStations(mappedStations);
+      } catch (error) {
+        console.error('Error fetching stations:', error);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const data = await response.json();
-      console.log("Fetched Data:", data);
+    fetchRadioStations();
+  }, []);
 
-      // Adjust this depending on API response structure
-      setRadioStations(data.genres);
-    } catch (error) {
-      console.error("Error fetching from Pocket FM API:", error);
-      return ;
-    } finally {
-      setLoading(false);
-    }
-  };
+  return (
+    <div className="space-y-8">
+      <h2 className="text-2xl font-bold text-white font-serif">
+        Featured Stations
+      </h2>
 
-  fetchRadioStations();
-}, []);
+      {/* Show total count */}
+      {!loading && totalCount > 0 && (
+        <p className="text-gray-400 text-sm">
+          Showing {radioStations.length} of {totalCount} genre{totalCount > 1 ? 's' : ''}.
+        </p>
+      )}
 
-// Find the currently selected station
-const selectedStationData = radioStations?.find(
-  station => station.id === selectedStation
-);
+      {loading ? (
+        // 1. Loading State
+        <div className="text-center p-12 bg-gray-900 rounded-xl">
+          <Waves size={32} className="text-red-500 animate-pulse mx-auto mb-4" />
+          <p className="text-lg text-gray-400">Loading stations...</p>
+        </div>
+      ) : radioStations.length > 0 ? (
+        // 2. Success State: Display Grid
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
+          {radioStations.map((station) => (
+            <div
+              key={station.id}
+              className="station-card 
+                         bg-gray-900 p-4 rounded-xl border border-gray-800 
+                         hover:border-red-500 transition-all duration-200 
+                         cursor-pointer text-center space-y-3"
+            >
+              <img
+                src={station.favicon}
+                alt={`${station.name} logo`}
+                className="w-16 h-16 object-cover rounded-full mx-auto shadow-lg"
+              />
+              <h3 className="text-md font-semibold text-white truncate">
+                {station.name}
+              </h3>
+              <div className="flex justify-center items-center space-x-1 text-sm text-red-500">
+                <Play size={16} />
+                <span className="font-medium">Listen</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // 3. Empty State
+        <div className="text-center p-12 bg-gray-900 rounded-xl">
+          <p className="text-lg text-gray-400">No stations found.</p>
+        </div>
+      )}
 
-// Timer to track playback progress
-useEffect(() => {
-  let interval: NodeJS.Timeout;
-  if (isPlaying) {
-    interval = setInterval(() => {
-      setCurrentTime(prev => prev + 1);
-    }, 1000);
-  }
-  return () => clearInterval(interval);
-}, [isPlaying]);
-
-// Format seconds into MM:SS
-const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+      {/* Features Section */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
+        <h2 className="text-2xl font-bold text-white mb-6 font-serif">
+          Why Arkham Radio?
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              icon: <Zap size={24} className="text-black" />,
+              title: 'AI Curated',
+              desc: 'Our AI learns your preferences and curates the perfect audio experience.',
+            },
+            {
+              icon: <Radio size={24} className="text-black" />,
+              title: 'Always Live',
+              desc: 'Continuous streams with no interruptions, just pure quality content.',
+            },
+            {
+              icon: <Waves size={24} className="text-black" />,
+              title: 'Genre Focused',
+              desc: 'Each station specializes in specific genres for the perfect mood.',
+            },
+          ].map((feature, i) => (
+            <div key={i} className="text-center space-y-3">
+              <div className="w-12 h-12 bg-silver rounded-full flex items-center justify-center mx-auto">
+                {feature.icon}
+              </div>
+              <h3 className="text-lg font-semibold text-white">{feature.title}</h3>
+              <p className="text-gray-400 text-sm">{feature.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-// Select a station
-const handleStationSelect = (stationId: string) => {
-  setSelectedStation(stationId);
-  setIsPlaying(true);
-  setCurrentTime(0);
-};
+// --- MAIN RADIO PAGE ---
+const RadioPage: React.FC<RadioPageProps> = ({ onPlayTrack }) => {
+  const [activeTab, setActiveTab] = useState<'personal' | 'in-house'>('personal');
 
-// Toggle play/pause
-const togglePlayPause = () => {
-  setIsPlaying(!isPlaying);
-};
+  const getTabClasses = (tabName: 'personal' | 'in-house') =>
+    `px-4 py-2 text-lg font-semibold border-b-2 transition-colors duration-200 ${
+      activeTab === tabName
+        ? 'border-red-500 text-white'
+        : 'border-transparent text-gray-500 hover:text-gray-300'
+    }`;
 
   return (
     <div className="space-y-8">
@@ -113,7 +203,9 @@ const togglePlayPause = () => {
           <Radio size={40} className="text-red-500" />
           <h1 className="text-4xl font-bold text-white font-serif">Arkham Radio</h1>
         </div>
-        <p className="text-xl text-zinc-400">Continuous streams of dark audio content</p>
+        <p className="text-xl text-zinc-400">
+          Continuous streams of dark audio content
+        </p>
         <div className="flex items-center justify-center space-x-6 text-sm text-zinc-500">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -126,200 +218,37 @@ const togglePlayPause = () => {
         </div>
       </div>
 
-      {/* Current Station Player */}
-      {selectedStationData && (
-        <div className="bg-gradient-to-r from-gray-900 to-gray-800 border border-gray-700 rounded-2xl p-8">
-          <div className="flex items-center space-x-6">
-            <div className="relative">
-              <img
-                src={selectedStationData.coverUrl}
-                alt={selectedStationData.name}
-                className="w-24 h-24 rounded-xl object-cover"
-              />
-              <div className="absolute -top-2 -right-2 bg-silver text-black px-2 py-1 rounded-full text-xs font-bold">
-                LIVE
-              </div>
-            </div>
-            
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-white font-serif mb-2">{selectedStationData.name}</h2>
-              <p className="text-gray-400 mb-3">{selectedStationData.description}</p>
-              
-              {selectedStationData.currentTrack && (
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-500">Now Playing:</p>
-                  <div className="flex items-center space-x-3">
-                    <img
-                      src={selectedStationData.currentTrack.coverUrl}
-                      alt={selectedStationData.currentTrack.title}
-                      className="w-12 h-12 rounded-lg object-cover"
-                    />
-                    <div>
-                      <h4 className="text-white font-medium">{selectedStationData.currentTrack.title}</h4>
-                      <p className="text-gray-400 text-sm">{selectedStationData.currentTrack.creator}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="text-center">
-                <div className="flex items-center space-x-1 text-gray-400 mb-1">
-                  <Waves size={16} />
-                  <span className="text-sm">{selectedStationData.listeners.toLocaleString()}</span>
-                </div>
-                <p className="text-xs text-gray-500">listeners</p>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <button className="p-3 rounded-full hover:bg-gray-700 transition-colors duration-200">
-                  <Heart size={20} className="text-gray-400" />
-                </button>
-                <button
-                  onClick={togglePlayPause}
-                  className="w-14 h-14 bg-silver hover:bg-white rounded-full flex items-center justify-center transition-colors duration-200"
-                >
-                  {isPlaying ? (
-                    <Pause size={24} className="text-black" />
-                  ) : (
-                    <Play size={24} className="text-black ml-1" />
-                  )}
-                </button>
-                <button className="p-3 rounded-full hover:bg-gray-700 transition-colors duration-200">
-                  <SkipForward size={20} className="text-gray-400" />
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-6">
-            <div className="flex items-center space-x-3">
-              <span className="text-xs text-gray-500">{formatTime(currentTime)}</span>
-              <div className="flex-1 h-1 bg-gray-700 rounded-full">
-                <div 
-                  className="h-full bg-silver rounded-full transition-all duration-1000"
-                  style={{ width: `${(currentTime % 300) / 3}%` }}
-                ></div>
-              </div>
-              <span className="text-xs text-gray-500">∞</span>
-            </div>
-          </div>
+      {/* --- Tab Switcher --- */}
+      <div className="border-b border-gray-700">
+        <div className="flex justify-center space-x-8">
+          <button
+            onClick={() => setActiveTab('personal')}
+            className={getTabClasses('personal')}
+          >
+            Personal
+          </button>
+          <button
+            onClick={() => setActiveTab('in-house')}
+            className={getTabClasses('in-house')}
+          >
+            In-House
+          </button>
+        </div>
+      </div>
+
+      {/* --- Tabs Content --- */}
+      {activeTab === 'personal' && <PersonalContent onPlayTrack={onPlayTrack} />}
+
+      {activeTab === 'in-house' && (
+        <div className="flex flex-col items-center justify-center h-96 bg-zinc-900 rounded-2xl border border-zinc-800 p-8 mt-8">
+          <MoreHorizontal size={48} className="text-gray-500 mb-4" />
+          <h2 className="text-3xl font-bold text-white mb-2">In-House Content</h2>
+          <p className="text-xl text-red-500 font-semibold">Coming Soon!</p>
+          <p className="text-gray-400 mt-2">
+            Stay tuned for exclusive content curated directly by the Arkham team.
+          </p>
         </div>
       )}
-
-      {/* Station Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {radioStations.map((station) => (
-          <div
-            key={station.id}
-            onClick={() => handleStationSelect(station.id)}
-            className={`group bg-zinc-900 border rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:bg-zinc-800 ${
-              selectedStation === station.id 
-                ? 'border-red-500 bg-zinc-800' 
-                : 'border-zinc-800 hover:border-zinc-700'
-            }`}
-          >
-            <div className="relative mb-4">
-              <img
-                src={station.coverUrl}
-                alt={station.name}
-                className="w-full h-48 object-cover rounded-xl"
-              />
-              <div className="absolute top-3 left-3 flex items-center space-x-2">
-                <div className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                  <span>LIVE</span>
-                </div>
-                <div className="bg-black/70 text-white px-2 py-1 rounded-full text-xs">
-                  {station.genre}
-                </div>
-              </div>
-              
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl flex items-center justify-center">
-                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <Play size={24} className="text-white ml-1" />
-                </div>
-              </div>
-            </div>
-            
-            <h3 className="text-lg font-semibold text-white mb-2 font-serif">{station.name}</h3>
-            <p className="text-zinc-400 text-sm mb-4 leading-relaxed">{station.description}</p>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-1 text-zinc-500 text-sm">
-                <Waves size={16} />
-                <span>{station.listeners.toLocaleString()}</span>
-              </div>
-              <div className="flex space-x-2">
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className="p-2 rounded-full hover:bg-zinc-700 transition-colors duration-200"
-                >
-                  <Heart size={16} className="text-zinc-500" />
-                </button>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className="p-2 rounded-full hover:bg-zinc-700 transition-colors duration-200"
-                >
-                  <MoreHorizontal size={16} className="text-zinc-500" />
-                </button>
-              </div>
-            </div>
-            
-            {/* Current Track Preview */}
-            {station.currentTrack && (
-              <div className="mt-4 pt-4 border-t border-zinc-800">
-                <p className="text-xs text-zinc-500 mb-2">Now Playing:</p>
-                <div className="flex items-center space-x-3">
-                  <img
-                    src={station.currentTrack.coverUrl}
-                    alt={station.currentTrack.title}
-                    className="w-10 h-10 rounded-lg object-cover"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h5 className="text-white text-sm font-medium truncate">{station.currentTrack.title}</h5>
-                    <p className="text-zinc-400 text-xs truncate">{station.currentTrack.creator}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Features */}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
-        <h2 className="text-2xl font-bold text-white mb-6 font-serif">Why Arkham Radio?</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center space-y-3">
-            <div className="w-12 h-12 bg-silver rounded-full flex items-center justify-center mx-auto">
-              <Zap size={24} className="text-black" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">AI Curated</h3>
-            <p className="text-gray-400 text-sm">Our AI learns your preferences and curates the perfect audio experience</p>
-          </div>
-          <div className="text-center space-y-3">
-            <div className="w-12 h-12 bg-silver rounded-full flex items-center justify-center mx-auto">
-              <Radio size={24} className="text-black" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">Always Live</h3>
-            <p className="text-gray-400 text-sm">Continuous streams with no interruptions, just pure quality content</p>
-          </div>
-          <div className="text-center space-y-3">
-            <div className="w-12 h-12 bg-silver rounded-full flex items-center justify-center mx-auto">
-              <Waves size={24} className="text-black" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">Genre Focused</h3>
-            <p className="text-gray-400 text-sm">Each station specializes in specific genres for the perfect mood</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
