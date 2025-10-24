@@ -1,228 +1,153 @@
+
 import React, { useState } from 'react';
-import { Play, Heart, MoreHorizontal, Grid2x2 as Grid, List, Clock, Users, Plus, Search, Filter } from 'lucide-react';
+import { Play, Heart, MoreHorizontal, Plus, Search, Filter, BookOpen, FlaskConical } from 'lucide-react';
 
 interface Track {
   id: string;
   title: string;
   creator: string;
-  duration: string;
-  type: 'podcast' | 'audio-drama' | 'slow-content' | 'solo-narration' | 'audiobook' | 'educational' | 'entertainment';
+  duration?: string;
   coverUrl: string;
-  audioUrl: string;
-  tags?: string[];
-}
-
-interface Playlist {
-  id: string;
-  name: string;
-  creator: string;
-  tracks: Track[];
-  coverUrl: string;
-  followers: number;
-  isPublic: boolean;
+  audioUrl?: string;
 }
 
 interface LibraryPageProps {
-  playlists: Playlist[];
-  tracks: Track[];
   onPlayTrack: (track: Track) => void;
 }
 
-const LibraryPage: React.FC<LibraryPageProps> = ({ playlists, tracks, onPlayTrack }) => {
-  const [activeTab, setActiveTab] = useState<'playlists' | 'tracks' | 'liked'>('playlists');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+const LibraryPage: React.FC<LibraryPageProps> = ({ onPlayTrack }) => {
+  const [activeTab, setActiveTab] = useState<'books' | 'research'>('books');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterAuthor, setFilterAuthor] = useState('');
 
-  const tabs = [
-    { id: 'playlists', label: 'My Playlists', count: playlists.length },
-    { id: 'tracks', label: 'My Tracks', count: tracks.length },
-    { id: 'liked', label: 'Liked', count: 24 }
+  const getTabClasses = (tabName: 'books' | 'research') =>
+    `px-4 py-2 text-lg font-semibold border-b-2 transition-colors duration-200 ${
+      activeTab === tabName
+        ? 'border-black text-black'
+        : 'border-transparent text-gray-500 hover:text-gray-700'
+    }`;
+
+  // Sample Data
+  const books = [
+    { id: 1, title: "Deep Learning Basics", author: "Ian Goodfellow", cover: "https://images.pexels.com/photos/1926988/pexels-photo-1926988.jpeg?auto=compress&cs=tinysrgb&w=150" },
+    { id: 2, title: "Clean Code", author: "Robert C. Martin", cover: "https://images.pexels.com/photos/2067569/pexels-photo-2067569.jpeg?auto=compress&cs=tinysrgb&w=150" },
+    { id: 3, title: "React Explained", author: "Zac Gordon", cover: "https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=150" },
+    { id: 4, title: "The Pragmatic Programmer", author: "Andy Hunt", cover: "https://images.pexels.com/photos/1529881/pexels-photo-1529881.jpeg?auto=compress&cs=tinysrgb&w=150" },
   ];
 
-  const typeLabels = {
-    'podcast': 'Podcast',
-    'audio-drama': 'Audio Drama',
-    'slow-content': 'Slow Content',
-    'solo-narration': 'Solo Narration'
-  };
+  const researchPapers = [
+    { id: 1, title: "AI-Driven Policy Models", author: "MIT Research Group", cover: "https://images.pexels.com/photos/1926988/pexels-photo-1926988.jpeg?auto=compress&cs=tinysrgb&w=150", desc: "Exploring how AI transforms law and policy frameworks." },
+    { id: 2, title: "Quantum Machine Learning", author: "Stanford AI Lab", cover: "https://images.pexels.com/photos/2067569/pexels-photo-2067569.jpeg?auto=compress&cs=tinysrgb&w=150", desc: "Study on leveraging quantum mechanics for ML acceleration." },
+    { id: 3, title: "Ethics in Automation", author: "Oxford Digital Society", cover: "https://images.pexels.com/photos/1529881/pexels-photo-1529881.jpeg?auto=compress&cs=tinysrgb&w=150", desc: "Analyzing bias and responsibility in AI decision-making." },
+  ];
 
-  const typeColors = {
-    'podcast': 'bg-black',
-    'audio-drama': 'bg-gray-800',
-    'slow-content': 'bg-green-600',
-    'solo-narration': 'bg-orange-600'
-  };
+  // Apply search and filter
+  const filteredBooks = books.filter(book =>
+    book.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    book.author.toLowerCase().includes(filterAuthor.toLowerCase())
+  );
+
+  const filteredResearch = researchPapers.filter(paper =>
+    (paper.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     paper.author.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    paper.author.toLowerCase().includes(filterAuthor.toLowerCase())
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-black">Your Library</h1>
+        <h1 className="text-3xl font-bold text-white">Your Library</h1>
         <button className="bg-black hover:bg-gray-800 text-white px-6 py-2 rounded-full font-semibold transition-all duration-200 flex items-center space-x-2">
           <Plus size={20} />
-          <span>Create Playlist</span>
+          <span>Add New</span>
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-8 border-b border-gray-200">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`pb-4 px-2 text-sm font-medium transition-colors duration-200 ${
-              activeTab === tab.id
-                ? 'text-white border-b-2 border-white'
-                : 'text-gray-600 hover:text-white'
-            }`}
-          >
-            {tab.label} ({tab.count})
+      {/* Tab Switcher */}
+      <div className="border-b border-gray-300">
+        <div className="flex justify-center space-x-8">
+          <button onClick={() => setActiveTab('books')} className={getTabClasses('books')}>
+            <div className="flex items-center space-x-2">
+              <BookOpen size={20} />
+              <span>Books</span>
+            </div>
           </button>
-        ))}
+          <button onClick={() => setActiveTab('research')} className={getTabClasses('research')}>
+            <div className="flex items-center space-x-2">
+              <FlaskConical size={20} />
+              <span>Research</span>
+            </div>
+          </button>
+        </div>
       </div>
 
-      {/* Controls */}
+      {/* Search & Filter */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
-              placeholder="Search in library..."
+              placeholder={activeTab === 'books' ? "Search books..." : "Search papers..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black"
+              className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black"
             />
           </div>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors duration-200">
-            <Filter size={16} />
-            <span>Filter</span>
-          </button>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`p-2 rounded-lg transition-colors duration-200 ${
-              viewMode === 'grid' ? 'bg-black text-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'
-            }`}
-          >
-            <Grid size={16} />
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-lg transition-colors duration-200 ${
-              viewMode === 'list' ? 'bg-black text-white' : 'text-gray-600 hover:text-black hover:bg-gray-100'
-            }`}
-          >
-            <List size={16} />
-          </button>
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Filter by author..."
+              value={filterAuthor}
+              onChange={(e) => setFilterAuthor(e.target.value)}
+              className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Content */}
-      {activeTab === 'playlists' && (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : 'space-y-3'}>
-          {playlists.map((playlist) => (
-            <div key={playlist.id} className={viewMode === 'grid' ? 'group bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300 cursor-pointer' : 'group flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer'}>
-              {viewMode === 'grid' ? (
-                <>
-                  <div className="relative mb-4">
-                    <img
-                      src={playlist.coverUrl}
-                      alt={playlist.name}
-                      className="w-full h-48 object-cover rounded-xl"
-                    />
-                    <button className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <Play size={32} className="text-white" />
-                    </button>
-                  </div>
-                  <h3 className="text-lg font-semibold text-black mb-2">{playlist.name}</h3>
-                  <p className="text-gray-600 text-sm mb-3">{playlist.tracks.length} tracks</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1 text-gray-600 text-sm">
-                      <Users size={16} />
-                      <span>{playlist.followers.toLocaleString()}</span>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                        <Heart size={16} className="text-gray-600" />
-                      </button>
-                      <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                        <MoreHorizontal size={16} className="text-gray-600" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <img
-                    src={playlist.coverUrl}
-                    alt={playlist.name}
-                    className="w-16 h-16 object-cover rounded-lg"
-                  />
-                  <div className="flex-1">
-                    <h4 className="text-black font-medium">{playlist.name}</h4>
-                    <p className="text-gray-600 text-sm">{playlist.tracks.length} tracks • {playlist.followers.toLocaleString()} followers</p>
-                  </div>
-                  <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                    <Play size={16} className="text-gray-600" />
-                  </button>
-                  <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                    <MoreHorizontal size={16} className="text-gray-600" />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === 'tracks' && (
-        <div className="space-y-3">
-          {tracks.map((track, index) => (
-            <div key={track.id} className="group flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-all duration-200 cursor-pointer">
-              <div className="text-gray-600 w-8 text-center">
-                <span className="group-hover:hidden">{index + 1}</span>
-                <button 
-                  onClick={() => onPlayTrack(track)}
-                  className="hidden group-hover:block p-1"
-                >
-                  <Play size={16} className="text-black" />
+      {/* --- BOOKS TAB --- */}
+      {activeTab === 'books' && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredBooks.map((book) => (
+            <div key={book.id} className="group bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-lg transition-all duration-300 cursor-pointer">
+              <img src={book.cover} alt={book.title} className="w-full h-48 object-cover rounded-xl mb-4" />
+              <h3 className="text-lg font-semibold text-black">{book.title}</h3>
+              <p className="text-gray-600 text-sm mb-3">{book.author}</p>
+              <div className="flex items-center justify-between">
+                <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                  <Heart size={16} className="text-gray-600" />
+                </button>
+                <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                  <MoreHorizontal size={16} className="text-gray-600" />
                 </button>
               </div>
-              <img
-                src={track.coverUrl}
-                alt={track.title}
-                className="w-16 h-16 object-cover rounded-lg"
-              />
-              <div className="flex-1">
-                <h4 className="text-black font-medium">{track.title}</h4>
-                <p className="text-gray-600 text-sm">{track.creator}</p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${typeColors[track.type]}`}>
-                {typeLabels[track.type]}
-              </span>
-              <div className="flex items-center space-x-1 text-gray-600 text-sm">
-                <Clock size={16} />
-                <span>{track.duration}</span>
-              </div>
-              <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                <Heart size={16} className="text-gray-600" />
-              </button>
-              <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                <MoreHorizontal size={16} className="text-gray-600" />
-              </button>
             </div>
           ))}
         </div>
       )}
 
-      {activeTab === 'liked' && (
-        <div className="text-center py-12">
-          <Heart size={64} className="text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-black mb-2">No liked content yet</h3>
-          <p className="text-gray-600">Start liking playlists and tracks to see them here</p>
+      {/* --- RESEARCH TAB --- */}
+      {activeTab === 'research' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredResearch.map((paper) => (
+            <div key={paper.id} className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-md transition-all duration-200">
+              <img src={paper.cover} alt={paper.title} className="w-full h-40 object-cover rounded-xl mb-4" />
+              <h3 className="text-lg font-semibold text-black mb-2">{paper.title}</h3>
+              <p className="text-sm text-gray-600 mb-2">{paper.author}</p>
+              <p className="text-gray-700 text-sm">{paper.desc}</p>
+              <div className="flex justify-end mt-4 space-x-2">
+                <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                  <Heart size={16} className="text-gray-600" />
+                </button>
+                <button className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                  <MoreHorizontal size={16} className="text-gray-600" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
